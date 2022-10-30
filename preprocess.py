@@ -21,8 +21,8 @@ def save_model(opts):
     datatype = 'float32'
     logging.info(f'Loading model {opts.model}')
     onnx_model = onnx.load(opts.model)
-    input_shape = {1, 3, 224, 224}
-    shape_dict = {'data': (1, 3, 224, 224)}
+    input_shape = {128, 3, 224, 224}
+    shape_dict = {'data': (128, 3, 224, 224)}
     
     mod, params = relay.frontend.from_onnx(onnx_model, shape_dict, datatype)
     with tvm.transform.PassContext(opt_level=3):
@@ -39,7 +39,7 @@ def save_model(opts):
         f_params.write(relay.save_param_dict(factory.get_params()))
         log.info(f'Saved params to mod.params')
 
-def preprocess_image(img_path):
+def preprocess_image(img_path, output_path):
     resized_image = Image.open(img_path).resize((224, 224))
     img_data = np.asarray(resized_image).astype("float32")
 
@@ -56,12 +56,12 @@ def preprocess_image(img_path):
     # Add batch dimension
     img_data = np.expand_dims(norm_img_data, axis=0)
     
-    with open('cat.bin', 'wb') as f:
+    with open(output_path, 'wb') as f:
         f.write(img_data)
 
 def verify_saved_model():
     log.info('verifying saved model')
-    with open('cat.bin', 'rb') as fp:
+    with open('snake.bin', 'rb') as fp:
         img_data = np.fromfile(fp, dtype='float32').reshape(1, 3, 224, 224)
 
     input_name = 'data'
@@ -76,14 +76,18 @@ def verify_saved_model():
     dev = tvm.device(str(target))
     module = graph_executor.create(graph, mlib, dev)
     module.load_params(params)
-    module.set_input(input_name, img_data)
+
+    img = np.vstack([img_data]*128)
+    module.set_input(input_name, img)
+
     module.run()
     tvm_output = module.get_output(0).numpy()
-    results = np.argmax(tvm_output, axis = 1)
-    if results[0] == 281:
-        print('saved model verification : success')
+    results0 = np.argmax(tvm_output[0], axis = 0)
+    results1 = np.argmax(tvm_output[127], axis = 0)
+    if results0 == 65 and results1 == 65:
+        log.info('saved model verification : success')
     else:
-        print('saved model verification : failed')
+        log.info('saved model verification : failed')
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
@@ -98,11 +102,17 @@ if __name__ == "__main__":
         download(model_url, "resnet50-v2-7.onnx")
         log.info(f'Downloading model complete')
 
-    img_path = './imagenet_cat.png'
-    if not os.path.isfile(img_path):
+    img1_path = './imagenet_cat.png'
+    if not os.path.isfile(img1_path):
         img_url = 'https://s3.amazonaws.com/model-server/inputs/kitten.jpg'
         download(img_url, './imagenet_cat.png')
+    preprocess_image(img1_path, 'cat.bin')
 
+    img2_path = './imagenet_snake.jpeg'
+    if not os.path.isfile(img2_path):
+        img_url = 'https://user-images.githubusercontent.com/19551872/163961172-87bc3b70-84ea-40e0-962d-be1a9d58d83d.JPEG'
+        download(img_url, './imagenet_snake.jpeg')
+    preprocess_image(img2_path, 'snake.bin')
+    
     save_model(opts)
-    preprocess_image(img_path)
     verify_saved_model()
