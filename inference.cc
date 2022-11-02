@@ -11,6 +11,8 @@
 #include <tvm/runtime/packed_func.h>
 #include <tvm/runtime/registry.h>
 
+const int BatchSize = 1024;
+
 class TvmGraphModule {
 public:
   explicit TvmGraphModule(std::string lib_path, std::string graph_path,
@@ -85,8 +87,8 @@ bool run_inference(const TvmGraphModule &mod, std::string in_path,
   std::string in_data((std::istreambuf_iterator<char>(input)),
                       std::istreambuf_iterator<char>());
 
-  int64_t in_shape[] = {128, 3, 224, 224};
-  constexpr int64_t out_shape[] = {128, 1000};
+  int64_t in_shape[] = {BatchSize, 3, 224, 224};
+  constexpr int64_t out_shape[] = {BatchSize, 1000};
   constexpr int in_dim = 4;
   constexpr int dtype_code = kDLFloat;
   constexpr int dtype_bits = 32;
@@ -118,7 +120,7 @@ bool run_inference(const TvmGraphModule &mod, std::string in_path,
     return false;
   }
 
-  size_t totalSize = in_data.length() * 128;
+  size_t totalSize = in_data.length() * BatchSize;
   char *batchData = (char *)malloc(totalSize);
 
   if (!batchData) {
@@ -126,7 +128,7 @@ bool run_inference(const TvmGraphModule &mod, std::string in_path,
     return false;
   }
 
-  for (int i = 0; i < 128; i++) {
+  for (int i = 0; i < BatchSize; i++) {
     char *dst = batchData + i * in_data.length();
     memcpy(dst, in_data.c_str(), in_data.length());
   }

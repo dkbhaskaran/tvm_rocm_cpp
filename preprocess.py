@@ -17,12 +17,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("preprocess")
 
+batchsize = 128
+
 def save_model(opts):
     datatype = 'float32'
     logging.info(f'Loading model {opts.model}')
     onnx_model = onnx.load(opts.model)
-    input_shape = {128, 3, 224, 224}
-    shape_dict = {'data': (128, 3, 224, 224)}
+    input_shape = {batchsize, 3, 224, 224}
+    shape_dict = {'data': (batchsize, 3, 224, 224)}
     
     mod, params = relay.frontend.from_onnx(onnx_model, shape_dict, datatype)
     with tvm.transform.PassContext(opt_level=3):
@@ -77,7 +79,7 @@ def verify_saved_model():
     module = graph_executor.create(graph, mlib, dev)
     module.load_params(params)
 
-    img = np.vstack([img_data]*128)
+    img = np.vstack([img_data]*batchsize)
     module.set_input(input_name, img)
 
     module.run()
